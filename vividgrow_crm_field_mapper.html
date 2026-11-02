@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VividGrow CRM & Field Mapper</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS for Interactive Mapping -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        agri: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 0.75rem;
+            z-index: 10;
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="h-full bg-slate-100 font-sans text-slate-800 antialiased flex flex-col">
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-green-400 text-lg"></i>
+        <span id="toast-message" class="text-sm font-medium">Action completed successfully!</span>
+    </div>
+
+    <!-- Top Navigation -->
+    <header class="bg-agri-900 text-white shadow-lg shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-agri-700 p-2.5 rounded-xl shadow-inner">
+                    <i class="fa-solid fa-seedling text-agri-100 text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">VividGrow CRM & Field Mapper</h1>
+                    <p class="text-xs text-agri-200">Professional Agricultural Relationship & Acreage Intelligence</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Navigation Tabs -->
+                <nav class="flex bg-agri-800 p-1 rounded-xl shadow-inner space-x-1">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all bg-agri-600 text-white shadow">
+                        <i class="fa-solid fa-chart-pie mr-1.5"></i>Dashboard
+                    </button>
+                    <button onclick="switchTab('growers')" id="nav-growers" class="tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all text-agri-200 hover:text-white hover:bg-agri-700/50">
+                        <i class="fa-solid fa-users mr-1.5"></i>Growers
+                    </button>
+                    <button onclick="switchTab('map')" id="nav-map" class="tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all text-agri-200 hover:text-white hover:bg-agri-700/50">
+                        <i class="fa-solid fa-map-location-dot mr-1.5"></i>Field Map
+                    </button>
+                    <button onclick="switchTab('visits')" id="nav-visits" class="tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all text-agri-200 hover:text-white hover:bg-agri-700/50">
+                        <i class="fa-solid fa-clipboard-user mr-1.5"></i>Visits
+                    </button>
+                </nav>
+
+                <!-- Data Backup / Export / Import Buttons -->
+                <div class="flex items-center space-x-1 bg-agri-800 p-1 rounded-xl shadow-inner">
+                    <button onclick="exportData()" title="Export JSON backup" class="p-2 text-agri-200 hover:text-white hover:bg-agri-700 rounded-lg text-sm transition-all"><i class="fa-solid fa-download"></i></button>
+                    <label title="Import JSON backup" class="p-2 text-agri-200 hover:text-white hover:bg-agri-700 rounded-lg text-sm transition-all cursor-pointer">
+                        <i class="fa-solid fa-upload"></i>
+                        <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
+
+        <!-- ================= TAB 1: DASHBOARD ================= -->
+        <section id="tab-content-dashboard" class="space-y-6">
+            <!-- Summary Metric Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Growers</p>
+                        <h3 id="stat-total-growers" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="bg-agri-50 text-agri-600 p-3.5 rounded-xl text-xl">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tracked Acres</p>
+                        <h3 id="stat-total-acres" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="bg-emerald-50 text-emerald-600 p-3.5 rounded-xl text-xl">
+                        <i class="fa-solid fa-tractor"></i>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Regions</p>
+                        <h3 id="stat-active-regions" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="bg-amber-50 text-amber-600 p-3.5 rounded-xl text-xl">
+                        <i class="fa-solid fa-globe"></i>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Recorded Visits</p>
+                        <h3 id="stat-total-visits" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="bg-sky-50 text-sky-600 p-3.5 rounded-xl text-xl">
+                        <i class="fa-solid fa-clipboard-check"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Welcome Card -->
+                <div class="bg-gradient-to-br from-agri-800 to-agri-900 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+                    <div>
+                        <span class="bg-agri-700/80 text-agri-100 text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider">Field Operations Hub</span>
+                        <h2 class="text-2xl font-bold mt-3">Smart Grower Management</h2>
+                        <p class="text-agri-200 text-sm mt-2 leading-relaxed">Pinpoint field acreage, track communication preferences, manage crop varieties, and schedule follow-ups seamlessly with VividGrow.</p>
+                    </div>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        <button onclick="openAddGrowerModal()" class="bg-white text-agri-900 hover:bg-agri-50 px-4 py-2.5 rounded-xl text-sm font-semibold shadow transition-all flex items-center">
+                            <i class="fa-solid fa-user-plus mr-2 text-agri-600"></i>Add Grower
+                        </button>
+                        <button onclick="switchTab('map')" class="bg-agri-700 hover:bg-agri-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow transition-all flex items-center">
+                            <i class="fa-solid fa-map-location-dot mr-2"></i>Open Map
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Recent Field Visits Feed -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-slate-900 text-lg flex items-center">
+                            <i class="fa-solid fa-history mr-2 text-agri-600"></i>Recent Field Visits & Reminders
+                        </h3>
+                        <button onclick="switchTab('visits')" class="text-sm font-semibold text-agri-600 hover:text-agri-800">View All</button>
+                    </div>
+                    <div id="dashboard-visits-list" class="space-y-3 overflow-y-auto max-h-[300px] pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: GROWERS ================= -->
+        <section id="tab-content-growers" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    <div class="relative w-full sm:w-72">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-search"></i>
+                        </span>
+                        <input type="text" id="grower-search" oninput="renderGrowers()" placeholder="Search growers, company..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                    </div>
+                    <select id="grower-crop-filter" onchange="renderGrowers()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-agri-500 w-full sm:w-48">
+                        <option value="">All Crop Varieties</option>
+                    </select>
+                </div>
+                <button onclick="openAddGrowerModal()" class="w-full sm:w-auto bg-agri-600 hover:bg-agri-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-plus mr-2"></i>Add New Grower
+                </button>
+            </div>
+
+            <!-- Growers Grid -->
+            <div id="growers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- ================= TAB 3: FIELD MAP ================= -->
+        <section id="tab-content-map" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-900">Interactive Field & Acreage Mapper</h2>
+                        <p class="text-sm text-slate-500">Click anywhere on the map to drop a pin, record exact acreage, specify soil & crop types, and attach field notes.</p>
+                    </div>
+                    <div class="flex items-center space-x-3 w-full lg:w-auto">
+                        <select id="map-grower-filter" onchange="filterMapPins()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-agri-500 w-full lg:w-64">
+                            <option value="">Filter by Grower (All)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Leaflet Map Container -->
+                <div class="relative">
+                    <div id="map"></div>
+                    <div class="absolute top-4 right-4 z-[400] bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow border border-slate-200 text-xs font-medium text-slate-700 pointer-events-none">
+                        <i class="fa-solid fa-hand-pointer mr-1 text-agri-600"></i> Click map to drop field pin
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mapped Fields Table / List -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-900 text-base">Recorded Fields & Pins</h3>
+                    <span id="field-count-badge" class="bg-agri-50 text-agri-700 text-xs font-semibold px-2.5 py-1 rounded-full">0 Fields</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-200">
+                                <th class="py-3 px-6">Field Name</th>
+                                <th class="py-3 px-6">Grower</th>
+                                <th class="py-3 px-6">Crop Variety</th>
+                                <th class="py-3 px-6">Soil Type</th>
+                                <th class="py-3 px-6">Acreage</th>
+                                <th class="py-3 px-6 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fields-table-body" class="divide-y divide-slate-100 text-sm text-slate-700">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 4: VISITS ================= -->
+        <section id="tab-content-visits" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center space-x-3 w-full sm:w-auto">
+                    <select id="visit-grower-filter" onchange="renderVisits()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-agri-500 w-full sm:w-72">
+                        <option value="">Filter Visits by Grower (All)</option>
+                    </select>
+                </div>
+                <button onclick="openAddVisitModal()" class="w-full sm:w-auto bg-agri-600 hover:bg-agri-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-clipboard-list mr-2"></i>Log New Visit
+                </button>
+            </div>
+
+            <!-- Visits Container -->
+            <div id="visits-container" class="space-y-4">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Add/Edit Grower Modal -->
+    <div id="grower-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden transform transition-all">
+            <div class="bg-agri-900 text-white px-6 py-4 flex justify-between items-center">
+                <h3 id="grower-modal-title" class="font-bold text-lg">Add New Grower</h3>
+                <button onclick="closeModal('grower-modal')" class="text-agri-200 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="grower-form" onsubmit="saveGrower(event)" class="p-6 space-y-4">
+                <input type="hidden" id="grower-id">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Grower Name *</label>
+                        <input type="text" id="grower-name" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. John Miller">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Company / Farm Name</label>
+                        <input type="text" id="grower-company" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. Miller Family Farms">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Phone Number</label>
+                        <input type="tel" id="grower-phone" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="(555) 000-0000">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email Address</label>
+                        <input type="email" id="grower-email" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="john@millerfarms.com">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Preferred Comm.</label>
+                        <select id="grower-comm" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                            <option value="Phone Call">Phone Call</option>
+                            <option value="Text Message">Text Message</option>
+                            <option value="Email">Email</option>
+                            <option value="In-Person">In-Person Visit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Crop Varieties</label>
+                        <input type="text" id="grower-crop" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. Nonpareil Almonds">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Account Status</label>
+                        <select id="grower-status" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                            <option value="Active">Active Partner</option>
+                            <option value="Prospect">Prospect</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Notes / Region / Soil Info</label>
+                    <textarea id="grower-notes" rows="3" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="Enter region, irrigation type, soil structure, custom CRM notes..."></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('grower-modal')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-agri-600 text-white hover:bg-agri-700 shadow">Save Grower</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add/Edit Field Pin Modal -->
+    <div id="field-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all">
+            <div class="bg-agri-900 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-lg">Record Field Pin & Acreage</h3>
+                <button onclick="closeModal('field-modal')" class="text-agri-200 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="field-form" onsubmit="saveField(event)" class="p-6 space-y-4">
+                <input type="hidden" id="field-id">
+                <input type="hidden" id="field-lat">
+                <input type="hidden" id="field-lng">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Field / Block Name *</label>
+                    <input type="text" id="field-name" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. North Orchard Block 4">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Associated Grower *</label>
+                    <select id="field-grower-id" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                        <option value="">Select a Grower</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Acreage *</label>
+                        <input type="number" step="0.1" id="field-acres" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. 45.5">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Crop Variety</label>
+                        <input type="text" id="field-crop" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. Walnuts">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Soil / Land Type</label>
+                    <input type="text" id="field-soil" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="e.g. Sandy Loam, Clay">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Location Coordinates</label>
+                    <div id="field-coords-display" class="text-xs font-mono bg-slate-100 p-2.5 rounded-lg text-slate-600">Lat: 0.0000, Lng: 0.0000</div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('field-modal')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-agri-600 text-white hover:bg-agri-700 shadow">Save Field Pin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Visit Log Modal -->
+    <div id="visit-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden transform transition-all">
+            <div class="bg-agri-900 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-lg">Log Field Visit & Reminder</h3>
+                <button onclick="closeModal('visit-modal')" class="text-agri-200 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="visit-form" onsubmit="saveVisit(event)" class="p-6 space-y-4">
+                <input type="hidden" id="visit-id">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Grower *</label>
+                        <select id="visit-grower-id" required onchange="updateFieldDropdownForVisit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                            <option value="">Select Grower</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Specific Field</label>
+                        <select id="visit-field-id" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                            <option value="">General Visit / All Fields</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Visit Date *</label>
+                        <input type="date" id="visit-date" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Follow-up Reminder Date</label>
+                        <input type="date" id="visit-followup" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Visit Purpose / Type</label>
+                    <select id="visit-type" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500">
+                        <option value="Crop Inspection">Crop Inspection</option>
+                        <option value="Soil & Water Test">Soil & Water Test</option>
+                        <option value="Sales / Consultation">Sales / Consultation</option>
+                        <option value="Harvest Check">Harvest Check</option>
+                        <option value="General Follow-up">General Follow-up</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Visit Notes & Observations *</label>
+                    <textarea id="visit-notes" rows="4" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-agri-500" placeholder="Summarize discussion, pest/disease check, irrigation status..."></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('visit-modal')" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-agri-600 text-white hover:bg-agri-700 shadow">Save Visit Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Application Script -->
+    <script>
+        // --- State & LocalStorage Management ---
+        let state = {
+            growers: JSON.parse(localStorage.getItem('agri_growers')) || [
+                { id: '1', name: 'Robert Vance', company: 'Vance Agro Co.', phone: '(559) 234-5678', email: 'robert@vanceagro.com', comm: 'Phone Call', crop: 'Nonpareil Almonds', status: 'Active', notes: 'Central Valley / Tulare County' },
+                { id: '2', name: 'Elena Rostova', company: 'Sunrise Orchards', phone: '(559) 987-6543', email: 'elena@sunriseorchards.net', comm: 'Text Message', crop: 'Pistachios', status: 'Active', notes: 'San Joaquin Valley' },
+                { id: '3', name: 'Marcus Brody', company: 'Brody Grain Farms', phone: '(559) 456-7890', email: 'marcus@brodygrains.com', comm: 'Email', crop: 'Corn & Wheat', status: 'Prospect', notes: 'Fresno County' }
+            ],
+            fields: JSON.parse(localStorage.getItem('agri_fields')) || [
+                { id: 'f1', growerId: '1', name: 'North Valley Block 1', crop: 'Almonds', soil: 'Sandy Loam', acres: 65.0, lat: 36.535, lng: -119.566 },
+                { id: 'f2', growerId: '1', name: 'Riverbed West', crop: 'Almonds', soil: 'Clay Loam', acres: 40.2, lat: 36.545, lng: -119.580 },
+                { id: 'f3', growerId: '2', name: 'Sunrise Hillside', crop: 'Pistachios', soil: 'Alluvial', acres: 120.0, lat: 36.515, lng: -119.520 }
+            ],
+            visits: JSON.parse(localStorage.getItem('agri_visits')) || [
+                { id: 'v1', growerId: '1', fieldId: 'f1', date: '2026-06-10', followup: '2026-06-25', type: 'Crop Inspection', notes: 'Canopy looks healthy, moderate irrigation active. No pest pressure observed.' },
+                { id: 'v2', growerId: '2', fieldId: 'f3', date: '2026-06-08', followup: '2026-06-18', type: 'Soil & Water Test', notes: 'Collected core samples for salinity testing. Results expected by Friday.' }
+            ]
+        };
+
+        function persistState() {
+            localStorage.setItem('agri_growers', JSON.stringify(state.growers));
+            localStorage.setItem('agri_fields', JSON.stringify(state.fields));
+            localStorage.setItem('agri_visits', JSON.stringify(state.visits));
+        }
+
+        // --- Data Export & Import ---
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `vividgrow_backup_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Backup data exported successfully!');
+        }
+
+        function importData(event) {
+            const fileReader = new FileReader();
+            if (event.target.files.length === 0) return;
+            fileReader.readAsText(event.target.files[0], "UTF-8");
+            fileReader.onload = e => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed.growers && parsed.fields && parsed.visits) {
+                        state = parsed;
+                        persistState();
+                        renderAll();
+                        showToast('Data imported successfully!');
+                    } else {
+                        showToast('Invalid backup file format.', 'error');
+                    }
+                } catch (err) {
+                    showToast('Error reading backup file.', 'error');
+                }
+            };
+        }
+
+        // --- Toast Notification ---
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toast-message');
+            const iconEl = document.getElementById('toast-icon');
+            
+            msgEl.textContent = message;
+            if (type === 'success') {
+                iconEl.className = 'fa-solid fa-circle-check text-green-400 text-lg';
+            } else {
+                iconEl.className = 'fa-solid fa-triangle-exclamation text-amber-400 text-lg';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // --- Navigation ---
+        function switchTab(tabId) {
+            ['dashboard', 'growers', 'map', 'visits'].forEach(t => {
+                document.getElementById(`tab-content-${t}`).classList.add('hidden');
+                const btn = document.getElementById(`nav-${t}`);
+                btn.className = "tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all text-agri-200 hover:text-white hover:bg-agri-700/50";
+            });
+
+            document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.className = "tab-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all bg-agri-600 text-white shadow";
+
+            if (tabId === 'map') {
+                setTimeout(() => { map.invalidateSize(); }, 200);
+            }
+            renderAll();
+        }
+
+        // --- Leaflet Map Setup ---
+        let map;
+        let markersLayer = L.layerGroup();
+
+        function initMap() {
+            map = L.map('map').setView([36.535, -119.566], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            markersLayer.addTo(map);
+
+            map.on('click', function(e) {
+                openAddFieldModalAtCoords(e.latlng.lat, e.latlng.lng);
+            });
+
+            renderMapPins();
+        }
+
+        function renderMapPins(filterGrowerId = '') {
+            markersLayer.clearLayers();
+            const filteredFields = filterGrowerId 
+                ? state.fields.filter(f => f.growerId === filterGrowerId)
+                : state.fields;
+
+            filteredFields.forEach(field => {
+                const grower = state.growers.find(g => g.id === field.growerId);
+                const growerName = grower ? grower.name : 'Unknown Grower';
+
+                const customIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: #16a34a; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);"><i class="fa-solid fa-tractor text-xs"></i></div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                const marker = L.marker([field.lat, field.lng], { icon: customIcon });
+                marker.bindPopup(`
+                    <div class="p-2 space-y-1">
+                        <span class="bg-agri-100 text-agri-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">${field.crop || 'Field'}</span>
+                        <h4 class="font-bold text-slate-900 text-sm mt-1">${field.name}</h4>
+                        <p class="text-xs text-slate-600"><i class="fa-solid fa-user text-agri-600 mr-1"></i> Grower: <strong>${growerName}</strong></p>
+                        <p class="text-xs text-slate-600"><i class="fa-solid fa-ruler-combined text-agri-600 mr-1"></i> Acreage: <strong>${field.acres} acres</strong></p>
+                        ${field.soil ? `<p class="text-xs text-slate-600"><i class="fa-solid fa-earth-americas text-agri-600 mr-1"></i> Soil: ${field.soil}</p>` : ''}
+                        <div class="pt-2 flex space-x-2">
+                            <button onclick="editField('${field.id}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded font-medium">Edit</button>
+                            <button onclick="deleteField('${field.id}')" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded font-medium">Delete</button>
+                        </div>
+                    </div>
+                `);
+                markersLayer.addLayer(marker);
+            });
+        }
+
+        function filterMapPins() {
+            const growerId = document.getElementById('map-grower-filter').value;
+            renderMapPins(growerId);
+        }
+
+        // --- Modals Control ---
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function populateDropdowns() {
+            // Grower Dropdowns for forms & filters
+            const selects = ['field-grower-id', 'visit-grower-id', 'map-grower-filter', 'visit-grower-filter'];
+            selects.forEach(selId => {
+                const el = document.getElementById(selId);
+                if (!el) return;
+                const currentVal = el.value;
+                
+                let defaultText = 'Select a Grower';
+                if (selId === 'map-grower-filter') defaultText = 'Filter by Grower (All)';
+                if (selId === 'visit-grower-filter') defaultText = 'Filter Visits by Grower (All)';
+
+                el.innerHTML = `<option value="">${defaultText}</option>`;
+                state.growers.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = `${g.name} (${g.company || 'Independent'})`;
+                    el.appendChild(opt);
+                });
+                el.value = currentVal;
+            });
+
+            // Crop Filter Dropdown
+            const cropFilter = document.getElementById('grower-crop-filter');
+            if (cropFilter) {
+                const curCrop = cropFilter.value;
+                cropFilter.innerHTML = '<option value="">All Crop Varieties</option>';
+                const uniqueCrops = [...new Set(state.growers.map(g => g.crop).filter(Boolean))];
+                uniqueCrops.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    cropFilter.appendChild(opt);
+                });
+                cropFilter.value = curCrop;
+            }
+        }
+
+        // --- Grower CRUD ---
+        function openAddGrowerModal() {
+            document.getElementById('grower-modal-title').textContent = 'Add New Grower';
+            document.getElementById('grower-form').reset();
+            document.getElementById('grower-id').value = '';
+            document.getElementById('grower-modal').classList.remove('hidden');
+        }
+
+        function editGrower(id) {
+            const grower = state.growers.find(g => g.id === id);
+            if (!grower) return;
+            document.getElementById('grower-modal-title').textContent = 'Edit Grower Details';
+            document.getElementById('grower-id').value = grower.id;
+            document.getElementById('grower-name').value = grower.name;
+            document.getElementById('grower-company').value = grower.company || '';
+            document.getElementById('grower-phone').value = grower.phone || '';
+            document.getElementById('grower-email').value = grower.email || '';
+            document.getElementById('grower-comm').value = grower.comm || 'Phone Call';
+            document.getElementById('grower-crop').value = grower.crop || '';
+            document.getElementById('grower-status').value = grower.status || 'Active';
+            document.getElementById('grower-notes').value = grower.notes || '';
+            document.getElementById('grower-modal').classList.remove('hidden');
+        }
+
+        function saveGrower(e) {
+            e.preventDefault();
+            const id = document.getElementById('grower-id').value;
+            const growerData = {
+                id: id ? id : 'g_' + Date.now(),
+                name: document.getElementById('grower-name').value,
+                company: document.getElementById('grower-company').value,
+                phone: document.getElementById('grower-phone').value,
+                email: document.getElementById('grower-email').value,
+                comm: document.getElementById('grower-comm').value,
+                crop: document.getElementById('grower-crop').value,
+                status: document.getElementById('grower-status').value,
+                notes: document.getElementById('grower-notes').value
+            };
+
+            if (id) {
+                const index = state.growers.findIndex(g => g.id === id);
+                if (index !== -1) state.growers[index] = growerData;
+                showToast('Grower updated successfully!');
+            } else {
+                state.growers.push(growerData);
+                showToast('New grower added successfully!');
+            }
+
+            persistState();
+            closeModal('grower-modal');
+            renderAll();
+        }
+
+        function deleteGrower(id) {
+            if (!confirm('Are you sure you want to delete this grower? Associated fields and visits may be orphaned.')) return;
+            state.growers = state.growers.filter(g => g.id !== id);
+            persistState();
+            renderAll();
+            showToast('Grower deleted.', 'warn');
+        }
+
+        function renderGrowers() {
+            const search = document.getElementById('grower-search').value.toLowerCase();
+            const cropFilter = document.getElementById('grower-crop-filter').value;
+            const grid = document.getElementById('growers-grid');
+            grid.innerHTML = '';
+
+            const filtered = state.growers.filter(g => {
+                const matchesSearch = g.name.toLowerCase().includes(search) || 
+                    (g.company && g.company.toLowerCase().includes(search)) ||
+                    (g.crop && g.crop.toLowerCase().includes(search));
+                const matchesCrop = !cropFilter || g.crop === cropFilter;
+                return matchesSearch && matchesCrop;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">No growers found. Click "Add New Grower" to get started.</div>`;
+                return;
+            }
+
+            filtered.forEach(grower => {
+                const fieldsCount = state.fields.filter(f => f.growerId === grower.id).length;
+                const totalAcres = state.fields.filter(f => f.growerId === grower.id).reduce((sum, f) => sum + parseFloat(f.acres || 0), 0);
+                const statusColor = grower.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md transition-shadow';
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-agri-600">${grower.company || 'Independent Grower'}</span>
+                                <h3 class="font-bold text-slate-900 text-lg mt-0.5">${grower.name}</h3>
+                            </div>
+                            <span class="text-xs px-2.5 py-1 rounded-full border font-semibold ${statusColor}">${grower.status}</span>
+                        </div>
+                        <div class="mt-4 space-y-2 text-sm text-slate-600">
+                            ${grower.phone ? `<p><i class="fa-solid fa-phone mr-2 text-slate-400 w-4"></i>${grower.phone} <span class="text-xs text-slate-400 ml-1">(${grower.comm || 'Call'})</span></p>` : ''}
+                            ${grower.email ? `<p><i class="fa-solid fa-envelope mr-2 text-slate-400 w-4"></i>${grower.email}</p>` : ''}
+                            ${grower.crop ? `<p><i class="fa-solid fa-seedling mr-2 text-agri-600 w-4"></i>Varieties: <strong>${grower.crop}</strong></p>` : ''}
+                        </div>
+                        ${grower.notes ? `<p class="mt-3 text-xs bg-slate-50 p-2.5 rounded-xl text-slate-500 italic border border-slate-100">"${grower.notes}"</p>` : ''}
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div class="text-xs text-slate-500 font-medium">
+                            <span class="font-bold text-slate-900">${fieldsCount}</span> Fields &bull; <span class="font-bold text-slate-900">${totalAcres.toFixed(1)}</span> Acres
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editGrower('${grower.id}')" class="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-sm"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteGrower('${grower.id}')" class="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // --- Field Pin CRUD ---
+        function openAddFieldModalAtCoords(lat, lng) {
+            document.getElementById('field-form').reset();
+            document.getElementById('field-id').value = '';
+            document.getElementById('field-lat').value = lat;
+            document.getElementById('field-lng').value = lng;
+            document.getElementById('field-coords-display').textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+            populateDropdowns();
+            document.getElementById('field-modal').classList.remove('hidden');
+        }
+
+        function editField(id) {
+            const field = state.fields.find(f => f.id === id);
+            if (!field) return;
+            document.getElementById('field-id').value = field.id;
+            document.getElementById('field-name').value = field.name;
+            document.getElementById('field-grower-id').value = field.growerId;
+            document.getElementById('field-acres').value = field.acres;
+            document.getElementById('field-crop').value = field.crop || '';
+            document.getElementById('field-soil').value = field.soil || '';
+            document.getElementById('field-lat').value = field.lat;
+            document.getElementById('field-lng').value = field.lng;
+            document.getElementById('field-coords-display').textContent = `Lat: ${field.lat.toFixed(4)}, Lng: ${field.lng.toFixed(4)}`;
+            
+            populateDropdowns();
+            document.getElementById('field-grower-id').value = field.growerId;
+            document.getElementById('field-modal').classList.remove('hidden');
+        }
+
+        function saveField(e) {
+            e.preventDefault();
+            const id = document.getElementById('field-id').value;
+            const fieldData = {
+                id: id ? id : 'f_' + Date.now(),
+                growerId: document.getElementById('field-grower-id').value,
+                name: document.getElementById('field-name').value,
+                acres: parseFloat(document.getElementById('field-acres').value) || 0,
+                crop: document.getElementById('field-crop').value,
+                soil: document.getElementById('field-soil').value,
+                lat: parseFloat(document.getElementById('field-lat').value),
+                lng: parseFloat(document.getElementById('field-lng').value)
+            };
+
+            if (id) {
+                const index = state.fields.findIndex(f => f.id === id);
+                if (index !== -1) state.fields[index] = fieldData;
+                showToast('Field pin updated!');
+            } else {
+                state.fields.push(fieldData);
+                showToast('New field pinned successfully!');
+            }
+
+            persistState();
+            closeModal('field-modal');
+            renderAll();
+        }
+
+        function deleteField(id) {
+            if (!confirm('Are you sure you want to delete this field pin?')) return;
+            state.fields = state.fields.filter(f => f.id !== id);
+            persistState();
+            renderAll();
+            showToast('Field pin removed.', 'warn');
+        }
+
+        function renderFieldsTable() {
+            const tbody = document.getElementById('fields-table-body');
+            tbody.innerHTML = '';
+            document.getElementById('field-count-badge').textContent = `${state.fields.length} Fields`;
+
+            if (state.fields.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-400">No fields mapped yet. Go to the Field Map tab and click anywhere to add a pin.</td></tr>`;
+                return;
+            }
+
+            state.fields.forEach(field => {
+                const grower = state.growers.find(g => g.id === field.growerId);
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0';
+                tr.innerHTML = `
+                    <td class="py-3 px-6 font-semibold text-slate-900">${field.name}</td>
+                    <td class="py-3 px-6 text-slate-700">${grower ? grower.name : 'Unknown'}</td>
+                    <td class="py-3 px-6"><span class="bg-agri-50 text-agri-700 text-xs px-2.5 py-1 rounded-full font-medium">${field.crop || 'N/A'}</span></td>
+                    <td class="py-3 px-6 text-slate-600 text-xs">${field.soil || 'Not specified'}</td>
+                    <td class="py-3 px-6 font-bold text-slate-900">${field.acres} acres</td>
+                    <td class="py-3 px-6 text-right space-x-2">
+                        <button onclick="editField('${field.id}')" class="text-slate-500 hover:text-agri-600 px-2 py-1"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteField('${field.id}')" class="text-slate-400 hover:text-red-600 px-2 py-1"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- Visit Log CRUD ---
+        function openAddVisitModal() {
+            document.getElementById('visit-form').reset();
+            document.getElementById('visit-id').value = '';
+            document.getElementById('visit-date').value = new Date().toISOString().split('T')[0];
+            populateDropdowns();
+            updateFieldDropdownForVisit();
+            document.getElementById('visit-modal').classList.remove('hidden');
+        }
+
+        function updateFieldDropdownForVisit() {
+            const growerId = document.getElementById('visit-grower-id').value;
+            const fieldSelect = document.getElementById('visit-field-id');
+            fieldSelect.innerHTML = `<option value="">General Visit / All Fields</option>`;
+            
+            if (!growerId) return;
+            const growerFields = state.fields.filter(f => f.growerId === growerId);
+            growerFields.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.textContent = `${f.name} (${f.acres} acres)`;
+                fieldSelect.appendChild(opt);
+            });
+        }
+
+        function saveVisit(e) {
+            e.preventDefault();
+            const id = document.getElementById('visit-id').value;
+            const visitData = {
+                id: id ? id : 'v_' + Date.now(),
+                growerId: document.getElementById('visit-grower-id').value,
+                fieldId: document.getElementById('visit-field-id').value,
+                date: document.getElementById('visit-date').value,
+                followup: document.getElementById('visit-followup').value,
+                type: document.getElementById('visit-type').value,
+                notes: document.getElementById('visit-notes').value
+            };
+
+            if (id) {
+                const index = state.visits.findIndex(v => v.id === id);
+                if (index !== -1) state.visits[index] = visitData;
+                showToast('Visit log updated!');
+            } else {
+                state.visits.unshift(visitData);
+                showToast('Visit and reminder recorded!');
+            }
+
+            persistState();
+            closeModal('visit-modal');
+            renderAll();
+        }
+
+        function deleteVisit(id) {
+            if (!confirm('Are you sure you want to delete this visit log?')) return;
+            state.visits = state.visits.filter(v => v.id !== id);
+            persistState();
+            renderAll();
+            showToast('Visit log removed.', 'warn');
+        }
+
+        function renderVisits() {
+            const filterGrowerId = document.getElementById('visit-grower-filter') ? document.getElementById('visit-grower-filter').value : '';
+            const container = document.getElementById('visits-container');
+            const dashContainer = document.getElementById('dashboard-visits-list');
+            
+            container.innerHTML = '';
+            if (dashContainer) dashContainer.innerHTML = '';
+
+            const filtered = filterGrowerId 
+                ? state.visits.filter(v => v.growerId === filterGrowerId)
+                : state.visits;
+
+            if (filtered.length === 0) {
+                const emptyHTML = `<div class="bg-white p-8 rounded-2xl text-center text-slate-400 border border-slate-200">No visit logs found. Click "Log New Visit" to record check-ins and follow-ups.</div>`;
+                container.innerHTML = emptyHTML;
+                if (dashContainer) dashContainer.innerHTML = emptyHTML;
+                return;
+            }
+
+            filtered.forEach(visit => {
+                const grower = state.growers.find(g => g.id === visit.growerId);
+                const field = state.fields.find(f => f.id === visit.fieldId);
+
+                const cardHTML = `
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row gap-6 justify-between items-start">
+                        <div class="space-y-2 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="bg-agri-50 text-agri-800 text-xs font-bold px-2.5 py-1 rounded-full uppercase">${visit.type}</span>
+                                <span class="text-xs text-slate-400"><i class="fa-regular fa-calendar mr-1"></i>Visited: ${visit.date}</span>
+                                ${visit.followup ? `<span class="text-xs bg-amber-50 text-amber-700 font-semibold px-2 py-0.5 rounded-full"><i class="fa-regular fa-bell mr-1"></i>Reminder: ${visit.followup}</span>` : ''}
+                            </div>
+                            <h4 class="text-base font-bold text-slate-900">
+                                ${grower ? grower.name : 'Unknown Grower'} 
+                                ${field ? `<span class="text-xs font-normal text-slate-500 ml-1">&bull; Field: ${field.name}</span>` : ''}
+                            </h4>
+                            <p class="text-sm text-slate-600 leading-relaxed">${visit.notes}</p>
+                        </div>
+                        <div class="flex md:flex-col justify-end items-end space-x-2 md:space-x-0 md:space-y-2 shrink-0">
+                            <button onclick="deleteVisit('${visit.id}')" class="text-slate-400 hover:text-red-600 p-2 rounded-lg bg-slate-50 hover:bg-red-50 text-sm"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+
+                container.innerHTML += cardHTML;
+                if (dashContainer && filtered.indexOf(visit) < 4) {
+                    dashContainer.innerHTML += cardHTML;
+                }
+            });
+        }
+
+        // --- Dashboard Stats ---
+        function renderDashboardStats() {
+            document.getElementById('stat-total-growers').textContent = state.growers.length;
+            
+            const totalAcres = state.fields.reduce((sum, f) => sum + parseFloat(f.acres || 0), 0);
+            document.getElementById('stat-total-acres').textContent = totalAcres.toFixed(1);
+            
+            // Unique regions extracted from grower notes or company locations
+            const regions = new Set();
+            state.growers.forEach(g => {
+                if (g.notes) regions.add(g.notes.split('/')[0].trim());
+            });
+            document.getElementById('stat-active-regions').textContent = Math.max(regions.size, 1);
+            document.getElementById('stat-total-visits').textContent = state.visits.length;
+        }
+
+        // --- Master Render ---
+        function renderAll() {
+            renderDashboardStats();
+            renderGrowers();
+            renderFieldsTable();
+            renderVisits();
+            populateDropdowns();
+            renderMapPins();
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            initMap();
+            renderAll();
+        };
+    </script>
+</body>
+</html>
+```
+@@eof
